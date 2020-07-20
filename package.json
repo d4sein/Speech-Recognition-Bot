@@ -1,0 +1,12 @@
+{
+    "name": "yourapp",
+    "version": "0.0.1",
+    "dependencies": {
+        "dialogflow": "^1.2.0",
+        "discord.js": "^12.2.0",
+        "fluent-ffmpeg": "^2.1.2",
+        "libsodium-wrappers": "^0.7.6",
+        "opusscript": "0.0.7",
+        "pb-util": "^0.1.3"
+    }
+}
