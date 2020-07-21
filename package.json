@@ -1,5 +1,5 @@
 {
-    "name": "yourapp",
+    "name": "speech-recognition-bot",
     "version": "0.0.1",
     "dependencies": {
         "dialogflow": "^1.2.0",
