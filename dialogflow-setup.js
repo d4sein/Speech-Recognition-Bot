@@ -9,7 +9,7 @@ const sessionId = '123456789'
 const languageCode = 'en'
 
 async function detectAudioIntent(
-  filename,
+  inputAudio,
   encoding,
   sampleRateHertz
 ) {
@@ -20,10 +20,6 @@ async function detectAudioIntent(
     projectId,
     sessionId
   )
-
-  // Reads the content of the audio file and send it as part of the request
-  const readFile = util.promisify(fs.readFile)
-  const inputAudio = await readFile(filename)
 
   const request = {
     session: sessionPath,
