@@ -3,6 +3,8 @@ const { Readable } = require('stream')
 
 const Discord = require('discord.js')
 const ffmpeg = require('fluent-ffmpeg')
+const ytdl = require('ytdl-core')
+const ytsr = require('ytsr')
 
 const { prefix, token } = require('./config')
 const { detectAudioIntent } = require('./dialogflow-setup')
@@ -18,6 +20,14 @@ class Silence extends Readable {
 
 const client = new Discord.Client()
 
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+
+
 client.on('ready', () => {
   console.log(`Up and running.`)
 })
@@ -31,11 +41,14 @@ client.on('message', async ctx => {
     case 'join':
       if (ctx.member.voice.channel) {
 
-        await ctx.member.voice.channel.join()
-          .then(connection => {
-            connection.play(new Silence(), { type: 'opus' })
+        const connection = await ctx.member.voice.channel.join()
+        const queue = new Map()
 
-            let audioStream = connection.receiver.createStream(ctx.author, { mode: 'pcm' })
+        connection.play(new Silence(), { type: 'opus' })
+
+        connection.on('speaking', async (user, speaking) => {
+          if (speaking.has('SPEAKING')) {
+            let audioStream = connection.receiver.createStream(user, { mode: 'pcm' })
             
             // Transforms the audio stream into something Dialogflow understands
             ffmpeg(audioStream)
@@ -45,26 +58,48 @@ client.on('message', async ctx => {
               .audioCodec('pcm_s16le')
               .format('s16le')
               .on('error', console.error)
-              .pipe(fs.createWriteStream('user_audio.wav'))
-          })  
+              .pipe(fs.createWriteStream(`${user.id}.wav`))
+
+            await sleep(1500)
+            
+            try {
+              let result = await detectAudioIntent(
+                `${user.id}.wav`,
+                'AUDIO_ENCODING_LINEAR_16',
+                44100
+                )
+                
+                switch (result.action) {
+                  case 'Play':
+                    let url = await ytsr(result.queryText, { limit: 1 })
+                    url = url.items[0].link
+
+                    connection.play(ytdl(url, {filter: 'audioonly'}))
+                    break
+                  
+                  case 'Stop':
+                    break
+                  
+                  case 'Pause':
+                    break
+
+                  case 'Skip':
+                    break
+
+                  default:
+                    break
+                }
+            } catch {}
+          }
+        })
       }
       break
 
     case 'leave':
       try {
-        await ctx.guild.voice.channel.leave()
+        ctx.guild.voice.channel.leave()
       }
       catch {}
-      break
-
-    case 'listen':
-      let result = await detectAudioIntent(
-        'user_audio.wav',
-        'AUDIO_ENCODING_LINEAR_16',
-        44100
-      )
-
-      await ctx.channel.send(result.queryText)
       break
 
     default:
