@@ -1,11 +1,20 @@
 const fs = require('fs')
-const util = require('util')
-const { Readable, Writable } = require('stream')
+const { Readable } = require('stream')
 
 const Discord = require('discord.js')
+
 const ffmpeg = require('fluent-ffmpeg')
+const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
+ffmpeg.setFfmpegPath(ffmpegPath)
+
+// ffmpeg.setFfmpegPath(path)
+// ffmpeg.setFfprobePath(path)
+
 const ytdl = require('ytdl-core')
 const ytsr = require('ytsr')
+
+const pico = require('hotword')
+const wavdecoder = require('wav-decoder')
 
 const { prefix, token } = require('./config')
 const { detectAudioIntent } = require('./dialogflow-setup')
@@ -18,11 +27,11 @@ class Silence extends Readable {
   }
 }
 
-// function sleep(ms) {
-//   return new Promise((resolve) => {
-//     setTimeout(resolve, ms)
-//   })
-// }
+// const piko = new pico ({
+//   howdy: fs.readFileSync('bumblebee.ppn')
+// }, 16000, (word) => {
+//   console.log(word)
+// })
 
 const client = new Discord.Client()
 
@@ -47,17 +56,20 @@ client.on('message', async ctx => {
             const audioStream = connection.receiver.createStream(user, { mode: 'pcm' })
 
             // Transforms the audio stream into something Dialogflow understands
+            // ffmpeg(audioStream)
             let convertedAudio = ffmpeg(audioStream)
               .inputFormat('s32le')
               .audioFrequency(44100)
               .audioChannels(1)
               .audioCodec('pcm_s16le')
-              .format('s16le')
+              .format('wav')
               .on('error', console.error)
-            
+              // .format('s16le')
+              // .pipe(fs.createWriteStream('audio2.wav'))
+
             let inputAudio
             let bufs = []
-              
+            
             convertedAudio = convertedAudio.pipe()
             convertedAudio
               .on('data', (chunk) => {
@@ -66,39 +78,54 @@ client.on('message', async ctx => {
               .on('end', async () => {
                 inputAudio = Buffer.concat(bufs)
 
-                try {
-                  let result = await detectAudioIntent(
-                    inputAudio,
-                    'AUDIO_ENCODING_LINEAR_16',
-                    44100
-                  )
-                  
-                  // Debug
-                  console.log(result)
-                  
-                  switch (result.action) {
-                    case 'Play':
-                      let url = await ytsr(result.queryText, { limit: 1 })
-                      url = url.items[0].link
-    
-                      connection.play(ytdl(url, {filter: 'audioonly'}))
-                      break
-                    
-                    case 'Stop':
-                      break
-                    
-                    case 'Pause':
-                      break
-    
-                    case 'Skip':
-                      break
-    
-                    default:
-                      break
-                    }
-                } catch (err) {
-                  console.error(err)
-                }
+                wavdecoder.decode(inputAudio)
+                  .then((wav) => {
+                    let piko = new pico ({
+                        howdy: fs.readFileSync('bumblebee.ppn')
+                    }, wav.sampleRate, async () => {
+                      try {
+                        let result = await detectAudioIntent(
+                          inputAudio,
+                          'AUDIO_ENCODING_LINEAR_16',
+                          44100
+                        )
+                        
+                        // Debug
+                        console.log(result)
+                        
+                        switch (result.action) {
+                          case 'Play':
+                            let search = result.queryText.split(' ').slice(1).join(' ')
+                            let url = await ytsr(search, { limit: 1 })
+                            url = url.items[0].link
+          
+                            connection.play(ytdl(url, {filter: 'audioonly'}))
+                            ctx.channel.send(result.queryText)
+                            break
+                          
+                          case 'Stop':
+                            break
+                          
+                          case 'Pause':
+                            break
+          
+                          case 'Skip':
+                            break
+          
+                          default:
+                            break
+                          }
+                      } catch (err) {
+                        console.error(err)
+                      }
+                    })
+            
+                    piko.init()
+                      .then(() => {
+                        for (let i = 0; i < wav.channelData[0].length; i += 1024)
+                        piko.feed(wav.channelData[0].slice(i, i + 1024))
+                      })
+                  })
               })
           }
         })

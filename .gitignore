@@ -1,6 +1,9 @@
 # Google's User Agent
 NewAgent*
 
+# Word Detection files
+*.ppn
+
 # ffmpeg App
 ffmpeg/
 

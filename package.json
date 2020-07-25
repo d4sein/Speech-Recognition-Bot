@@ -2,9 +2,11 @@
     "name": "speech-recognition-bot",
     "version": "0.0.1",
     "dependencies": {
+        "@ffmpeg-installer/ffmpeg": "^1.0.20",
         "dialogflow": "^1.2.0",
         "discord.js": "^12.2.0",
         "fluent-ffmpeg": "^2.1.2",
+        "hotword": "^1.0.9",
         "libsodium-wrappers": "^0.7.6",
         "opusscript": "0.0.7",
         "pb-util": "^0.1.3",
