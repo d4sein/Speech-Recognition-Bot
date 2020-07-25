@@ -1,7 +1,5 @@
-const fs = require('fs')
-const util = require('util')
-
 const dialogflow = require('dialogflow')
+
 
 // Configuration
 const projectId = 'newagent-vxvwah'
