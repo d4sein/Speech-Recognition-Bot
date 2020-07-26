@@ -4,6 +4,7 @@ const Discord = require('discord.js')
 
 const ytdl = require('ytdl-core')
 const ytsr = require('ytsr')
+ytsr.do_warn_deprecate = false
 
 const { prefix, token } = require('./config')
 const { processAudio } = require('./audio-processing-setup')
@@ -37,14 +38,20 @@ async function handleVoiceCommands(command, connection, ctx) {
     let server = servers[ctx.guild.id]
 
     if (server.search) {
-      options = { '1': 0, '2': 1, '3': 2, '4': 3, '5': 4,
-                  'one': 0, 'two': 1, 'three': 2, 'four': 3, 'five': 4 }
+      const pairs = [
+        ['first', 'one','1'],
+        ['second', 'two','2'],
+        ['third', 'three', '3'],
+        ['fourth', 'four', '4'],
+        ['fifth', 'five', '5']
+      ]
+      
+      const index = pairs.findIndex(arr => arr.some(s => command.queryText.includes(s)))
 
-      for (option in options) {
-        if (command.queryText.includes(option)) {
-          server.queue.push(server.search[options[option]].link)
-          delete server.search
-        }
+      if (index >= 0) {
+        server.queue.push(server.search[index].link)
+        console.log(server.queue)
+        delete server.search
       }
 
       return
@@ -85,6 +92,7 @@ async function handleVoiceCommands(command, connection, ctx) {
   // Dialogflow couldn't understand them clearly
   switch (command.action) {
     case 'Play':
+      if (command.queryText.split(' ').length < 3) return
       await addToQueue()
       await playQueue()
       break
@@ -95,13 +103,17 @@ async function handleVoiceCommands(command, connection, ctx) {
       break
     
     case 'Search':
+      if (command.queryText.split(' ').length < 3) return
       await makeSearch()
       break
 
     case 'Stop':
       server.queue = []
-      server.dispatcher.destroy()
-      ctx.channel.send('Stopping..')
+      
+      if (server.dispatcher) {
+        server.dispatcher.destroy()
+        ctx.channel.send('Stopping..')
+      }
       break
     
     case 'Pause':
