@@ -1,21 +1,12 @@
-const fs = require('fs')
 const { Readable } = require('stream')
 
 const Discord = require('discord.js')
 
-const ffmpeg = require('fluent-ffmpeg')
-const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path
-ffmpeg.setFfmpegPath(ffmpegPath)
-
 const ytdl = require('ytdl-core')
 const ytsr = require('ytsr')
 
-const pico = require('hotword')
-const hotword = fs.readFileSync('bumblebee.ppn')
-const wavdecoder = require('wav-decoder')
-
 const { prefix, token } = require('./config')
-const { detectAudioIntent } = require('./dialogflow-setup')
+const { processAudio } = require('./audio-processing-setup')
 
 
 // Noiseless stream of audio to send when the bot joins a voice channel
@@ -26,23 +17,59 @@ class Silence extends Readable {
 }
 
 async function handleVoiceCommands(command, connection, ctx) {
+  console.log(command.queryText + ' -> ' + command.action)
+  async function playQueue() {
+    let server = servers[ctx.guild.id]
+    
+    server.dispatcher = connection.play(ytdl(server.queue[0], { filter: 'audioonly' }))
+
+    server.dispatcher.on('finish', function () {
+      server.queue.shift()
+
+      if (server.queue[0]) {
+        setTimeout(playQueue, 3000)
+      }
+    })
+  }
+
+  async function addToQueue() {
+    if (!servers[ctx.guild.id]) servers[ctx.guild.id] = { queue: [] }
+    let server = servers[ctx.guild.id]
+    
+    let search = command.queryText.split(' ').slice(2).join(' ')
+    let url = await ytsr(search, { limit: 1 })
+    
+    server.queue.push(url.items[0].link)
+  }
+
+  let server = servers[ctx.guild.id]
+  if (server) console.log(server.queue)
+
   switch (command.action) {
     case 'Play':
-      let search = command.queryText.split(' ').slice(2).join(' ')
-      let url = await ytsr(search, { limit: 1 })
-      url = url.items[0].link
-
-      connection.play(ytdl(url, {filter: 'audioonly'}))
-      ctx.channel.send('Play ' + search)
+      await addToQueue()
+      await playQueue()
       break
     
+    case 'Add':
+      await addToQueue()
+      break
+
     case 'Stop':
+      server.queue = []
+      server.dispatcher.destroy()
       break
     
     case 'Pause':
+      if (!server.dispatcher.paused) server.dispatcher.pause()
       break
+    
+    case 'Resume':
+      // Not working yet (for some reason)
+      if (server.dispatcher.paused) server.dispatcher.resume()
 
     case 'Skip':
+      if (server.dispatcher) server.dispatcher.destroy()
       break
 
     default:
@@ -51,6 +78,9 @@ async function handleVoiceCommands(command, connection, ctx) {
 }
 
 const client = new Discord.Client()
+
+// To store queues
+servers = {}
 
 client.on('ready', () => {
   console.log(`Up and running.`)
@@ -64,61 +94,17 @@ client.on('message', async ctx => {
   switch (command) {
     case 'join':
       if (ctx.member.voice.channel) {
-
         const connection = await ctx.member.voice.channel.join()
         connection.play(new Silence(), { type: 'opus' })
 
         connection.on('speaking', async (user, speaking) => {
           if (speaking.has('SPEAKING')) {
-            const audioStream = connection.receiver.createStream(user, { mode: 'pcm' })
+            let audioStream = connection.receiver.createStream(user, { mode: 'pcm' })
+            let result = await processAudio(audioStream)
 
-            // Transforms the audio stream into something Dialogflow understands
-            let convertedAudio = ffmpeg(audioStream)
-              .inputFormat('s32le')
-              .audioFrequency(44100)
-              .audioChannels(1)
-              .audioCodec('pcm_s16le')
-              .format('wav')
-              .pipe()
-
-            let inputAudio
-            let bufs = []
-            
-            convertedAudio
-              .on('data', (chunk) => {
-                bufs.push(chunk)
-              })
-              .on('end', async () => {
-                inputAudio = Buffer.concat(bufs)
-
-                wavdecoder.decode(inputAudio)
-                .then((wav) => {
-                  let piko = new pico ({
-                    bumblebee: hotword
-                  }, wav.sampleRate, async () => {
-                    let result
-
-                    try {
-                      result = await detectAudioIntent(
-                        inputAudio,
-                        'AUDIO_ENCODING_LINEAR_16',
-                        44100
-                      )
-                    } catch (err) {
-                      console.error(err)
-                      return
-                    }
-
-                    handleVoiceCommands(result, connection, ctx)
-                  })
-
-                  piko.init()
-                    .then(() => {
-                      for (let i = 0; i < wav.channelData[0].length; i += 1024)
-                      piko.feed(wav.channelData[0].slice(i, i + 1024))
-                    })
-                })
-              })
+            if (result) {
+              handleVoiceCommands(result, connection, ctx)
+            }
           }
         })
       }
@@ -132,5 +118,6 @@ client.on('message', async ctx => {
       break
   }
 })
+
 
 client.login(token)
