@@ -35,6 +35,20 @@ async function handleVoiceCommands(command, connection, ctx) {
   async function addToQueue() {
     if (!servers[ctx.guild.id]) servers[ctx.guild.id] = { queue: [] }
     let server = servers[ctx.guild.id]
+
+    if (server.search) {
+      options = { '1': 0, '2': 1, '3': 2, '4': 3, '5': 4,
+                  'one': 0, 'two': 1, 'three': 2, 'four': 3, 'five': 4 }
+
+      for (option in options) {
+        if (command.queryText.includes(option)) {
+          server.queue.push(server.search[options[option]].link)
+          delete server.search
+        }
+      }
+
+      return
+    }
     
     let search = command.queryText.split(' ').slice(2).join(' ')
     let url = await ytsr(search, { limit: 1 })
@@ -42,22 +56,52 @@ async function handleVoiceCommands(command, connection, ctx) {
     server.queue.push(url.items[0].link)
   }
 
-  let server = servers[ctx.guild.id]
-  if (server) console.log(server.queue)
+  async function makeSearch() {
+    if (!servers[ctx.guild.id]) servers[ctx.guild.id] = { queue: [] }
+    let server = servers[ctx.guild.id]
 
+    let search = command.queryText.split(' ').slice(2).join(' ')
+    let url = await ytsr(search, { limit: 5 })
+    
+    server.search = url.items
+    
+    let titles = ''
+
+    for (index in url.items) {
+      titles += `**${parseInt(index)+1}.** ${url.items[index].title}\n`
+    }
+
+    const embededMessage = new Discord.MessageEmbed()
+      .setColor('#ffbc1f')
+      .setTitle('**SEARCH RESULTS**')
+      .setDescription(titles)
+
+    await ctx.channel.send(embededMessage)
+  }
+
+  let server = servers[ctx.guild.id]
+
+  // I had to use synonyms for some actions because
+  // Dialogflow couldn't understand them clearly
   switch (command.action) {
     case 'Play':
       await addToQueue()
       await playQueue()
       break
     
-    case 'Add':
+    case 'Include':
       await addToQueue()
+      ctx.channel.send('Queueing..')
+      break
+    
+    case 'Search':
+      await makeSearch()
       break
 
     case 'Stop':
       server.queue = []
       server.dispatcher.destroy()
+      ctx.channel.send('Stopping..')
       break
     
     case 'Pause':
@@ -69,7 +113,10 @@ async function handleVoiceCommands(command, connection, ctx) {
       if (server.dispatcher.paused) server.dispatcher.resume()
 
     case 'Skip':
-      if (server.dispatcher) server.dispatcher.destroy()
+      if (server.dispatcher) {
+        server.dispatcher.end()
+        ctx.channel.send('Skipping..')
+      }
       break
 
     default:
@@ -96,6 +143,7 @@ client.on('message', async ctx => {
       if (ctx.member.voice.channel) {
         const connection = await ctx.member.voice.channel.join()
         connection.play(new Silence(), { type: 'opus' })
+        ctx.channel.send('I\'m listening.. My hotword is **bumblebee**.')
 
         connection.on('speaking', async (user, speaking) => {
           if (speaking.has('SPEAKING')) {
