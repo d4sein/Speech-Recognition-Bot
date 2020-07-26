@@ -22,13 +22,14 @@ async function handleVoiceCommands(command, connection, ctx) {
   async function playQueue() {
     let server = servers[ctx.guild.id]
     
+    if (!server.queue.length) return
     server.dispatcher = connection.play(ytdl(server.queue[0], { filter: 'audioonly' }))
 
     server.dispatcher.on('finish', function () {
       server.queue.shift()
 
       if (server.queue[0]) {
-        setTimeout(playQueue, 3000)
+        setTimeout(playQueue, 2000)
       }
     })
   }
@@ -38,6 +39,7 @@ async function handleVoiceCommands(command, connection, ctx) {
     let server = servers[ctx.guild.id]
 
     if (server.search) {
+      const deny = ['do not', 'don\'t']
       const pairs = [
         ['first', 'one','1'],
         ['second', 'two','2'],
@@ -45,12 +47,15 @@ async function handleVoiceCommands(command, connection, ctx) {
         ['fourth', 'four', '4'],
         ['fifth', 'five', '5']
       ]
-      
+
       const index = pairs.findIndex(arr => arr.some(s => command.queryText.includes(s)))
 
       if (index >= 0) {
         server.queue.push(server.search[index].link)
-        console.log(server.queue)
+        ctx.channel.send('Queueing..')
+        delete server.search
+      } else if (deny.some(s => command.queryText.includes(s))) {
+        ctx.channel.send('Canceling search..')
         delete server.search
       }
 
@@ -92,14 +97,17 @@ async function handleVoiceCommands(command, connection, ctx) {
   // Dialogflow couldn't understand them clearly
   switch (command.action) {
     case 'Play':
-      if (command.queryText.split(' ').length < 3) return
-      await addToQueue()
-      await playQueue()
+      if (command.queryText.split(' ').length < 3) {
+        await playQueue()
+      } else {
+        await addToQueue()
+        await playQueue()
+      }
       break
     
     case 'Include':
+      if (command.queryText.split(' ').length < 3) return
       await addToQueue()
-      ctx.channel.send('Queueing..')
       break
     
     case 'Search':
@@ -148,9 +156,11 @@ client.on('ready', () => {
 client.on('message', async ctx => {
   if (!ctx.content.startsWith(prefix)) return
 
-  const command = ctx.content.slice(prefix.length)
+  const command = ctx.content.slice(prefix.length).split()
+  const action = command[0]
+  const args = command.slice(1)
 
-  switch (command) {
+  switch (action) {
     case 'join':
       if (ctx.member.voice.channel) {
         const connection = await ctx.member.voice.channel.join()
@@ -168,6 +178,11 @@ client.on('message', async ctx => {
           }
         })
       }
+      break
+
+    case 'play':
+      if (!args) return
+      if (!ytdl.validateURL(args[0])) return
       break
 
     case 'leave':
