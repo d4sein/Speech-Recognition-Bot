@@ -16,7 +16,6 @@ class Server {
   }
 }
 
-
 class Song {
   constructor(title, link, duration) {
     this.title = title
@@ -24,7 +23,6 @@ class Song {
     this.duration = duration
   }
 }
-
 
 async function handleVoiceCommands(command, connection, ctx) {
   // Debug
