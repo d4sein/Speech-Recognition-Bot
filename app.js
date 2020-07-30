@@ -1,9 +1,9 @@
+const fs = require('fs')
 const { Readable } = require('stream')
 
 const Discord = require('discord.js')
 const ytdl = require('ytdl-core')
 
-const { prefix, token } = require('./config')
 const { processAudio } = require('./audio-processing-setup')
 const { handleVoiceCommands } = require('./voice-commands')
 
@@ -16,6 +16,7 @@ class Silence extends Readable {
 }
 
 
+const config = JSON.parse(fs.readFileSync('config.json'))
 const client = new Discord.Client()
 
 client.on('ready', () => {
@@ -23,9 +24,9 @@ client.on('ready', () => {
 })
 
 client.on('message', async ctx => {
-  if (!ctx.content.startsWith(prefix)) return
+  if (!ctx.content.startsWith(config.prefix)) return
 
-  const command = ctx.content.slice(prefix.length).split()
+  const command = ctx.content.slice(config.prefix.length).split()
 
   switch (command[0]) {
     case 'join':
@@ -60,4 +61,4 @@ client.on('message', async ctx => {
   }
 })
 
-client.login(token)
+client.login(config.token)

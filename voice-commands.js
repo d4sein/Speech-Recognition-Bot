@@ -1,7 +1,11 @@
+const fs = require('fs')
+
 const ytdl = require('ytdl-core')
 const ytsr = require('ytsr')
+ytsr.do_warn_deprecate = false
 
 
+let config = JSON.parse(fs.readFileSync('config.json'))
 let servers = new Map()
 
 class Server {
@@ -25,7 +29,6 @@ class Song {
 async function handleVoiceCommands(command, connection, ctx) {
   // Debug
   console.log(command.queryText + ' -> ' + command.action)
-
   if (!servers.has(ctx.guild.id)) servers.set(ctx.guild.id, new Server())
 
   async function playQueue() {
@@ -34,7 +37,7 @@ async function handleVoiceCommands(command, connection, ctx) {
     if (!server.queue.length) return
     let song = server.queue[0]
 
-    server.dispatcher = connection.play(ytdl(song.link, { filter: 'audioonly' }))
+    server.dispatcher = connection.play(ytdl(song.link, { filter: 'audioonly' }, () => {}, true))
     ctx.channel.send(`Playing.. **${song.title}**`)
 
     server.dispatcher.on('finish', function () {
@@ -63,15 +66,27 @@ async function handleVoiceCommands(command, connection, ctx) {
         return
       }
 
-      const options = [
-        ['first', 'one','1'],
-        ['second', 'two','2'],
-        ['third', 'three', '3'],
-        ['fourth', 'four', '4'],
-        ['fifth', 'five', '5']
-      ]
+      let options
 
-      const index = options.findIndex(arr => arr.some(s => command.queryText.includes(s)))
+      if (config.language == 'en') {
+        options = [
+          ['first', 'one','1'],
+          ['second', 'two','2'],
+          ['third', 'three', '3'],
+          ['fourth', 'four', '4'],
+          ['fifth', 'five', '5']
+        ]
+      } else if (config.language == 'pt-BR') {
+        options = [
+          ['primeira', 'um','1'],
+          ['segunda', 'dois','2'],
+          ['terceira', 'três', '3'],
+          ['quarta', 'quatro', '4'],
+          ['quinta', 'cinco', '5']
+        ] 
+      }
+
+      const index = options.findIndex(arr => arr.some(s => command.queryText.toLowerCase().includes(s)))
 
       if (index >= 0) {
         // If the user gives a valid option
@@ -108,10 +123,11 @@ async function handleVoiceCommands(command, connection, ctx) {
   }
 
   let server = servers.get(ctx.guild.id)
+  command.queryText = command.queryText.toLowerCase()
 
   // I had to use synonyms for some actions because
   // Dialogflow couldn't understand them clearly
-  switch (command.action) {
+  switch (command.action) {   
     case 'Play':
       if (command.queryText.split(' ').length < 3) {
         await playQueue()
@@ -137,24 +153,49 @@ async function handleVoiceCommands(command, connection, ctx) {
       
       if (server.dispatcher) {
         server.dispatcher.destroy()
-        ctx.channel.send('Stopping..')
+        ctx.channel.send(command.fulfillmentText)
       }
       break
     
     case 'Pause':
-      return
-      if (!server.dispatcher.paused) server.dispatcher.pause()
+      if (!server.dispatcher.paused) {
+        server.dispatcher.pause()
+        ctx.channel.send(command.fulfillmentText)
+      }
       break
     
     case 'Resume':
-      return
-      // Not working yet (for some reason)
-      if (server.dispatcher.paused) server.dispatcher.resume()
+      if (server.dispatcher.paused) {
+        server.dispatcher.resume()
+        ctx.channel.send(command.fulfillmentText)
+      }
+      break
 
     case 'Skip':
       if (server.dispatcher) {
         server.dispatcher.end()
-        ctx.channel.send('Skipping..')
+        ctx.channel.send(command.fulfillmentText)
+      }
+      break
+
+    case 'Change':
+      if (['language', 'lingua', 'idioma']
+        .some(s => command.queryText.includes(s))) {
+
+        if (['portuguese', 'português']
+          .some(s => command.queryText.includes(s))) {
+
+            config.language = 'pt-BR'
+            ctx.channel.send('Mudei o reconhecimento de voz para Português.')
+        } else if (['english', 'inglês']
+          .some(s => command.queryText.includes(s))) {
+
+            config.language = 'en'
+            ctx.channel.send('I changed the speech recognition to English.')
+        }
+
+        let data = JSON.stringify(config)
+        fs.writeFileSync('config.json', data)
       }
       break
 

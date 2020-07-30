@@ -8,7 +8,7 @@ ffmpeg/
 *.wav
 
 # Config file
-config.js
+config.json
 
 # Logs
 logs

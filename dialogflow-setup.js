@@ -1,16 +1,19 @@
+const fs = require('fs')
 const dialogflow = require('dialogflow')
 
 
 // Configuration
 const projectId = 'newagent-vxvwah'
 const sessionId = '123456789'
-const languageCode = 'en'
 
 async function detectAudioIntent(
   inputAudio,
   encoding,
   sampleRateHertz
 ) {
+  let config = JSON.parse(fs.readFileSync('config.json'))
+  let languageCode = config.language
+  
   const sessionClient = new dialogflow.SessionsClient()
 
   // The path to identify the agent that owns the created intent
@@ -34,7 +37,7 @@ async function detectAudioIntent(
   // Recognizes the speech in the audio and detects its intent
   const [response] = await sessionClient.detectIntent(request)
   const result = response.queryResult
-
+  
   return result
 }
 
